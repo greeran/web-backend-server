@@ -1,0 +1,12 @@
+node_modules/
+uploads/
+backend/uploads/
+*.log
+.DS_Store
+Thumbs.db
+.env
+config/local.json
+logs/
+*_pb.js
+# Keep main config
+config/config.json 
