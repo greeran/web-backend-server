@@ -26,12 +26,8 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => cb(null, file.originalname),
 });
-const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname);
-  if (ALLOWED_EXTENSIONS.includes(ext)) cb(null, true);
-  else cb(new Error('File type not allowed'), false);
-};
-const upload = multer({ storage, fileFilter });
+// Remove fileFilter from multer setup
+const upload = multer({ storage });
 
 const app = express();
 app.use(cors());
@@ -154,28 +150,31 @@ function resolveDir(baseDir, dir) {
   return path.isAbsolute(dir) ? dir : path.join(baseDir, dir);
 }
 
-// --- Protobuf Upload Endpoint (dynamic, with field checks, returns JSON) ---
-app.post('/api/upload', express.raw({ type: 'application/octet-stream', limit: '20mb' }), (req, res) => {
+// --- Upload Endpoint (multipart/form-data, uses multer, returns JSON) ---
+app.post('/api/upload', upload.single('file'), (req, res) => {
   try {
-    const uploadMsg = fileopsProto.decodeFileUpload(new Uint8Array(req.body));
-    const buttonName = uploadMsg.button_name || null;
+    const buttonName = req.body.button_name || null;
     const uploadCfg = getUploadConfig(buttonName) || getUploadConfig();
     if (!uploadCfg) throw new Error('No upload config found');
-    const filename = uploadMsg.filename;
-    const data = uploadMsg.data;
-    if (!filename) throw new Error('No filename provided in upload message');
-    if (!data) throw new Error('No file data provided in upload message');
+    if (!req.file) throw new Error('No file uploaded');
+    const filename = req.file.originalname;
     const ext = path.extname(filename);
     if (uploadCfg.allowed_extensions && !uploadCfg.allowed_extensions.includes(ext)) {
+      // Remove the uploaded file if not allowed
+      fs.unlinkSync(req.file.path);
       throw new Error('File type not allowed');
     }
-    if (uploadCfg.max_file_size && data.length > uploadCfg.max_file_size) {
+    if (uploadCfg.max_file_size && req.file.size > uploadCfg.max_file_size) {
+      fs.unlinkSync(req.file.path);
       throw new Error('File size exceeds limit');
     }
+    // Move file to correct upload directory if needed
     const uploadDir = resolveDir(uploadCfg.upload_directory, UPLOAD_DIR);
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-    const filePath = path.join(uploadDir, filename);
-    fs.writeFileSync(filePath, Buffer.from(data));
+    const destPath = path.join(uploadDir, filename);
+    if (req.file.path !== destPath) {
+      fs.renameSync(req.file.path, destPath);
+    }
     res.json({ filename, success: true, error: '' });
   } catch (err) {
     res.json({ filename: '', success: false, error: err.message || 'Upload failed' });
