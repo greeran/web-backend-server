@@ -180,15 +180,14 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     res.json({ filename: '', success: false, error: err.message || 'Upload failed' });
   }
 });
-// --- Protobuf Download Endpoint (dynamic, with field checks, returns JSON) ---
-app.post('/api/download', express.raw({ type: 'application/octet-stream', limit: '2mb' }), (req, res) => {
+// --- Download Endpoint (POST, JSON, sends file as download) ---
+app.post('/api/download', express.json(), (req, res) => {
   try {
-    const downloadReq = fileopsProto.decodeFileDownloadRequest(new Uint8Array(req.body));
-    const buttonName = downloadReq.button_name || null;
+    const buttonName = req.body.button_name || null;
     const downloadCfg = getDownloadConfig(buttonName) || getDownloadConfig();
     if (!downloadCfg) throw new Error('No download config found');
-    const filename = downloadReq.filename;
-    if (!filename) throw new Error('No filename provided in download message');
+    const filename = req.body.filename;
+    if (!filename) throw new Error('No filename provided');
     const ext = path.extname(filename);
     if (downloadCfg.allowed_extensions && !downloadCfg.allowed_extensions.includes(ext)) {
       throw new Error('File type not allowed');
@@ -196,10 +195,9 @@ app.post('/api/download', express.raw({ type: 'application/octet-stream', limit:
     const rootDir = resolveDir(downloadCfg.root_directory, UPLOAD_DIR);
     const filePath = path.join(rootDir, filename);
     if (!fs.existsSync(filePath)) throw new Error('File not found');
-    // For download, you may want to send the file as a download, but for now, just return JSON meta
-    res.json({ filename, success: true, error: '' });
+    res.download(filePath, filename);
   } catch (err) {
-    res.json({ filename: '', success: false, error: err.message || 'Download failed' });
+    res.status(400).json({ filename: '', success: false, error: err.message || 'Download failed' });
   }
 });
 // --- RESTful Actions Endpoint (frontend-friendly, no MQTT details exposed) ---
@@ -232,33 +230,41 @@ app.post('/api/action', express.json(), (req, res) => {
   }
 });
 
-// --- File browser endpoint ---
+// --- Browse Endpoint (supports button_name, prevents parent directory escape, with debug logs) ---
 app.get('/api/browse', (req, res) => {
-  const filesTab = config.tabs.find(tab => tab.id === 'files');
-  const rootDir = filesTab?.download?.root_directory
-    ? path.isAbsolute(filesTab.download.root_directory)
-      ? filesTab.download.root_directory
-      : path.join(__dirname, filesTab.download.root_directory)
-    : path.join(__dirname, 'uploads');
-
-  // Get requested path, default to root
-  let relPath = req.query.path || '';
-  // Prevent directory traversal
-  relPath = relPath.replace(/\\/g, '/').replace(/\.\./g, '');
-  const absPath = path.join(rootDir, relPath);
-  if (!absPath.startsWith(rootDir)) {
-    return res.status(400).json({ error: 'Invalid path' });
-  }
-  fs.readdir(absPath, { withFileTypes: true }, (err, entries) => {
-    if (err) return res.status(500).json({ error: 'Failed to list directory' });
-    const directories = entries.filter(e => e.isDirectory()).map(e => e.name);
-    const files = entries.filter(e => e.isFile()).map(e => e.name);
-    res.json({
-      path: relPath,
-      directories,
-      files
+  try {
+    const buttonName = req.query.button_name || null;
+    const downloadCfg = getDownloadConfig(buttonName) || getDownloadConfig();
+    if (!downloadCfg) throw new Error('No download config found');
+    const rootDir = resolveDir(downloadCfg.root_directory, UPLOAD_DIR);
+    let relPath = req.query.path || '';
+    relPath = relPath.replace(/\\/g, '/').replace(/\.{2,}/g, '');
+    const absPath = path.join(rootDir, relPath);
+    const resolvedRoot = path.resolve(rootDir);
+    const resolvedAbs = path.resolve(absPath);
+    // Debug logs
+    console.log('[BROWSE] button_name:', buttonName);
+    console.log('[BROWSE] rootDir:', rootDir);
+    console.log('[BROWSE] relPath:', relPath);
+    console.log('[BROWSE] absPath:', absPath);
+    console.log('[BROWSE] resolvedRoot:', resolvedRoot);
+    console.log('[BROWSE] resolvedAbs:', resolvedAbs);
+    if (!resolvedAbs.startsWith(resolvedRoot)) {
+      return res.status(400).json({ error: 'Access outside of root directory is not allowed' });
+    }
+    fs.readdir(absPath, { withFileTypes: true }, (err, entries) => {
+      if (err) return res.status(500).json({ error: 'Failed to list directory' });
+      const directories = entries.filter(e => e.isDirectory()).map(e => e.name);
+      const files = entries.filter(e => e.isFile()).map(e => e.name);
+      res.json({
+        path: relPath,
+        directories,
+        files
+      });
     });
-  });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Browse failed' });
+  }
 });
 
 const server = http.createServer(app);
