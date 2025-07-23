@@ -313,7 +313,30 @@ function getUnitForTopic(topic) {
 }
 
 function formatSensorData(topic, parsed) {
-  // Try to find the first numeric property in parsed
+  // If the relevant data is under the 'u' key, extract value, timestamp, and unit
+  if (parsed && typeof parsed === 'object' && parsed['u'] !== undefined && Array.isArray(parsed['u'])) {
+    const arr = parsed['u'];
+    const value = arr[0];
+    const timestamp = arr[1] !== undefined ? arr[1] : Date.now();
+    const unit = arr[2] !== undefined ? arr[2] : getUnitForTopic(topic);
+    return { value, unit, timestamp };
+  }
+
+  const unit = getUnitForTopic(topic);
+  const timestamp = Date.now();
+
+  // Per-sensor logic for known types (optional, can be extended)
+  if (topic === 'sensor/temperature' && parsed.temperature !== undefined) {
+    return { value: parsed.temperature, unit, timestamp };
+  }
+  if (topic === 'sensor/compass' && parsed.heading !== undefined) {
+    return { value: parsed.heading, unit, timestamp };
+  }
+  if (topic === 'sensor/gps' && parsed.position) {
+    return { ...parsed.position, unit, timestamp };
+  }
+
+  // Fallback: first numeric property
   let value = undefined;
   for (const key in parsed) {
     if (typeof parsed[key] === 'number') {
@@ -321,10 +344,7 @@ function formatSensorData(topic, parsed) {
       break;
     }
   }
-  // If still undefined, use the whole parsed object
   if (value === undefined) value = parsed;
-  const unit = getUnitForTopic(topic);
-  const timestamp = Date.now();
   return { value, unit, timestamp };
 }
 
