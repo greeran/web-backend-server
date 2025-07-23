@@ -1,0 +1,120 @@
+{
+  "application": {
+    "name": "IMX8MP Web Server",
+    "version": "1.0.0"
+  },
+  "tabs": [
+    {
+      "id": "sensors",
+      "title": "Sensors",
+      "enabled": true,
+      "members": [
+        {
+          "type": "sensor",
+          "name": "Temperature",
+          "topic": "sensor/temperature",
+          "description": "CPU Temperature",
+          "unit": "°C",
+          "refresh_interval": 5000,
+          "threshold": { "max": 80, "min": 0 }
+        },
+        {
+          "type": "sensor",
+          "name": "Compass",
+          "topic": "sensor/compass",
+          "description": "Compass Heading",
+          "unit": "degrees",
+          "refresh_interval": 2000
+        },
+        {
+          "type": "sensor",
+          "name": "GPS",
+          "topic": "sensor/gps",
+          "description": "GPS Location",
+          "unit": "decimal_degrees",
+          "refresh_interval": 10000
+        },
+        {
+          "type": "button",
+          "button_name": "Test button",
+          "publish_topic": "action/test"
+        },
+        {
+          "type": "button",
+          "button_name": "Test Message",
+          "publish_topic": "action/message",
+          "text_input": true,
+          "subscribe_ack_topic": "action/message/ack"
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "title": "Files",
+      "enabled": true,
+      "members": [
+        {
+        "type": "upload",
+        "button_name": "Upload File",
+        "upload_directory": "./backend/uploads",
+        "allowed_extensions": [".txt", ".csv", ".jpg"],
+        "max_file_size": 10485760
+        },
+        {
+        "type": "download",
+        "button_name": "Download File",
+        "root_directory": "./backend/downloads",
+        "allowed_extensions": [".txt", ".csv", ".jpg"]
+        },
+        {
+          "type": "sensor",
+          "name": "test",
+          "topic": "sensor/test",
+          "description": "test ",
+          "unit": "decimal_degrees",
+          "refresh_interval": 10000
+        }
+      ]
+    },
+    {
+      "id": "actions",
+      "title": "Actions",
+      "enabled": true,
+      "members": [
+        {
+          "type": "button",
+          "button_name": "Reboot Device",
+          "publish_topic": "action/reboot"
+        },
+        {
+          "type": "button",
+          "button_name": "Send Message",
+          "publish_topic": "action/message",
+          "text_input": true,
+          "subscribe_ack_topic": "device/message/ack"
+        },
+        {
+          "type": "sensor",
+          "name": "test2",
+          "topic": "sensor/test2",
+          "description": "test2 ",
+          "unit": "decimal_degrees",
+          "refresh_interval": 10000
+        },
+        {
+          "type": "sensor",
+          "name": "test3",
+          "topic": "sensor/test3",
+          "description": "test3 ",
+          "unit": "decimal_degrees",
+          "refresh_interval": 10000
+        }
+      ]
+    }
+  ],
+  "broker": {
+    "host": "localhost",
+    "port": 1883,
+    "client_id": "web-client"
+  }
+} 

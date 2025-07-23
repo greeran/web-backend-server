@@ -8,5 +8,3 @@ Thumbs.db
 config/local.json
 logs/
 *_pb.js
-# Keep main config
-config/config.json 
