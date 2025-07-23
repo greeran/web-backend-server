@@ -180,22 +180,22 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     res.json({ filename: '', success: false, error: err.message || 'Upload failed' });
   }
 });
-// --- Download Endpoint (POST, JSON, sends file as download) ---
+// --- Download Endpoint (POST, JSON, sends file as download, supports filename or path) ---
 app.post('/api/download', express.json(), (req, res) => {
   try {
     const buttonName = req.body.button_name || null;
     const downloadCfg = getDownloadConfig(buttonName) || getDownloadConfig();
     if (!downloadCfg) throw new Error('No download config found');
-    const filename = req.body.filename;
+    const filename = req.body.filename || req.body.path;
     if (!filename) throw new Error('No filename provided');
     const ext = path.extname(filename);
     if (downloadCfg.allowed_extensions && !downloadCfg.allowed_extensions.includes(ext)) {
       throw new Error('File type not allowed');
     }
-    const rootDir = resolveDir(downloadCfg.root_directory, UPLOAD_DIR);
+    const rootDir = resolveDir(__dirname, downloadCfg.root_directory);
     const filePath = path.join(rootDir, filename);
     if (!fs.existsSync(filePath)) throw new Error('File not found');
-    res.download(filePath, filename);
+    res.download(filePath, path.basename(filename));
   } catch (err) {
     res.status(400).json({ filename: '', success: false, error: err.message || 'Download failed' });
   }
@@ -236,7 +236,8 @@ app.get('/api/browse', (req, res) => {
     const buttonName = req.query.button_name || null;
     const downloadCfg = getDownloadConfig(buttonName) || getDownloadConfig();
     if (!downloadCfg) throw new Error('No download config found');
-    const rootDir = resolveDir(downloadCfg.root_directory, UPLOAD_DIR);
+    // FIX: Use __dirname for download root
+    const rootDir = resolveDir(__dirname, downloadCfg.root_directory);
     let relPath = req.query.path || '';
     relPath = relPath.replace(/\\/g, '/').replace(/\.{2,}/g, '');
     const absPath = path.join(rootDir, relPath);
@@ -255,7 +256,7 @@ app.get('/api/browse', (req, res) => {
     fs.readdir(absPath, { withFileTypes: true }, (err, entries) => {
       if (err) return res.status(500).json({ error: 'Failed to list directory' });
       const directories = entries.filter(e => e.isDirectory()).map(e => e.name);
-      const files = entries.filter(e => e.isFile()).map(e => e.name);
+      const files = entries.filter(e => e.isFile()).map(e => ({ filename: e.name }));
       res.json({
         path: relPath,
         directories,
