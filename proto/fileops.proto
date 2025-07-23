@@ -2,21 +2,9 @@ syntax = "proto3";
 
 package fileops;
 
-// Message for file upload
-message FileUpload {
+// Message for file event notification (upload/download)
+message FileEvent {
   string filename = 1;
-  bytes data = 2;
-}
-
-// Message for file download request
-message FileDownloadRequest {
-  string filename = 1;
-}
-
-// Message for file download response
-message FileDownloadResponse {
-  string filename = 1;
-  bytes data = 2;
-  bool success = 3;
-  string error = 4;
+  uint64 size = 2;
+  string button_name = 3;
 } 

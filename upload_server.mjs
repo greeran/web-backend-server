@@ -150,7 +150,7 @@ function resolveDir(baseDir, dir) {
   return path.isAbsolute(dir) ? dir : path.join(baseDir, dir);
 }
 
-// --- Upload Endpoint (multipart/form-data, uses multer, returns JSON) ---
+// --- Upload Endpoint (multipart/form-data, uses multer, returns JSON, publishes MQTT event) ---
 app.post('/api/upload', upload.single('file'), (req, res) => {
   try {
     const buttonName = req.body.button_name || null;
@@ -160,7 +160,6 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
     const filename = req.file.originalname;
     const ext = path.extname(filename);
     if (uploadCfg.allowed_extensions && !uploadCfg.allowed_extensions.includes(ext)) {
-      // Remove the uploaded file if not allowed
       fs.unlinkSync(req.file.path);
       throw new Error('File type not allowed');
     }
@@ -168,19 +167,28 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
       fs.unlinkSync(req.file.path);
       throw new Error('File size exceeds limit');
     }
-    // Move file to correct upload directory if needed
-    const uploadDir = resolveDir(uploadCfg.upload_directory, UPLOAD_DIR);
+    const uploadDir = resolveDir(__dirname, uploadCfg.upload_directory);
     if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
     const destPath = path.join(uploadDir, filename);
     if (req.file.path !== destPath) {
       fs.renameSync(req.file.path, destPath);
+    }
+    // Publish MQTT event after upload
+    if (mqttClient && mqttClient.connected && fileopsProto.FileEvent) {
+      const relPath = path.relative(uploadDir, destPath);
+      const eventMsg = new fileopsProto.FileEvent();
+      eventMsg.setFilename(relPath);
+      eventMsg.setSize(req.file.size);
+      eventMsg.setButtonName(buttonName || '');
+      const eventBuffer = eventMsg.serializeBinary();
+      mqttClient.publish('file/uploaded', eventBuffer);
     }
     res.json({ filename, success: true, error: '' });
   } catch (err) {
     res.json({ filename: '', success: false, error: err.message || 'Upload failed' });
   }
 });
-// --- Download Endpoint (POST, JSON, sends file as download, supports filename or path) ---
+// --- Download Endpoint (POST, JSON, sends file as download, supports filename or path, publishes MQTT event) ---
 app.post('/api/download', express.json(), (req, res) => {
   try {
     const buttonName = req.body.button_name || null;
@@ -195,6 +203,17 @@ app.post('/api/download', express.json(), (req, res) => {
     const rootDir = resolveDir(__dirname, downloadCfg.root_directory);
     const filePath = path.join(rootDir, filename);
     if (!fs.existsSync(filePath)) throw new Error('File not found');
+    // Publish MQTT event after download
+    if (mqttClient && mqttClient.connected && fileopsProto.FileEvent) {
+      const relPath = path.relative(rootDir, filePath);
+      const stats = fs.statSync(filePath);
+      const eventMsg = new fileopsProto.FileEvent();
+      eventMsg.setFilename(relPath);
+      eventMsg.setSize(stats.size);
+      eventMsg.setButtonName(buttonName || '');
+      const eventBuffer = eventMsg.serializeBinary();
+      mqttClient.publish('file/downloaded', eventBuffer);
+    }
     res.download(filePath, path.basename(filename));
   } catch (err) {
     res.status(400).json({ filename: '', success: false, error: err.message || 'Download failed' });
