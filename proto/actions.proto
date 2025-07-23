@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package actions;
+
+// Message for sending an action
+message ActionRequest {
+  string topic = 1;
+  string payload = 2;
+  string ack_topic = 3;
+}
+
+// Message for action acknowledgment
+message ActionAck {
+  string ack = 1;
+  bool success = 2;
+  string error = 3;
+} 

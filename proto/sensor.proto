@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package sensor;
+
+// GPS position data
+message GpsData {
+  double latitude = 1;    // Decimal degrees
+  double longitude = 2;   // Decimal degrees
+  double altitude = 3;    // Meters above sea level
+  double accuracy = 4;    // Position accuracy in meters (optional)
+}
+
+// Individual sensor readings
+message TemperatureData {
+  double temperature = 1;  // Celsius
+  int64 timestamp = 2;    // Unix timestamp in milliseconds
+  string unit = 3;        // "celsius"
+}
+
+message CompassData {
+  double heading = 1;     // Degrees (0-360)
+  int64 timestamp = 2;    // Unix timestamp in milliseconds
+  string unit = 3;        // "degrees"
+}
+
+message GpsPositionData {
+  GpsData position = 1;
+  int64 timestamp = 2;    // Unix timestamp in milliseconds
+  string unit = 3;        // "decimal_degrees"
+}
+
+// Combined sensor data
+message SensorData {
+  double cpu_temperature = 1;  // Celsius
+  double compass_heading = 2;  // Degrees (0-360)
+  GpsData gps = 3;            // GPS position
+  int64 timestamp = 4;        // Unix timestamp in milliseconds
+  string device_id = 5;       // Device identifier
+  string version = 6;         // Protocol version
+}
+
+// Status message
+message StatusMessage {
+  enum Status {
+    UNKNOWN = 0;
+    ONLINE = 1;
+    OFFLINE = 2;
+    ERROR = 3;
+  }
+  
+  Status status = 1;
+  string device_id = 2;
+  int64 timestamp = 3;
+  string message = 4;  // Optional status message
+} 
