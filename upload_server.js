@@ -240,8 +240,17 @@ app.post('/api/action', express.json(), (req, res) => {
     if (!mqttClient.connected) {
       mqttClient.reconnect();
     }
-    const payload = value !== undefined && value !== null ? value : '';
-    mqttClient.publish(topic, payload);
+    // Construct ActionRequest protobuf message
+    const actionMsg = new actionsProto.ActionRequest();
+    actionMsg.setTopic(topic);
+    if (value !== undefined && value !== null) {
+      actionMsg.setPayload(String(value));
+    }
+    if (buttonConfig.subscribe_ack_topic) {
+      actionMsg.setAckTopic(buttonConfig.subscribe_ack_topic);
+    }
+    const actionBuffer = actionMsg.serializeBinary();
+    mqttClient.publish(topic, actionBuffer);
     res.json({ ack: 'Action sent', success: true, error: '' });
   } catch (err) {
     res.json({ ack: '', success: false, error: err.message || 'Action failed' });
@@ -398,7 +407,7 @@ mqttClient.on('message', (topic, message) => {
     }
     const formatted = formatSensorData(topic, parsed);
     // Log the outgoing sensor data
-    console.log('[SENSOR OUT]', topic, formatted);
+    //console.log('[SENSOR OUT]', topic, formatted);
     updateLatestSensorData(topic, formatted);
     broadcastWS({ type: 'sensor_update', sensor: topic.split('/')[1], data: formatted });
   }
