@@ -42,9 +42,10 @@
         {
           "type": "button",
           "button_name": "Test Message",
-          "publish_topic": "action/message",
+          "publish_topic": "action/test",
           "text_input": true,
-          "subscribe_ack_topic": "action/message/ack"
+          "subscribe_ack_topic": "ack/action/test",
+          "ack_timeout": 7000
         }
       ]
     },
@@ -91,7 +92,8 @@
           "button_name": "Send Message",
           "publish_topic": "action/message",
           "text_input": true,
-          "subscribe_ack_topic": "device/message/ack"
+          "subscribe_ack_topic": "ack/action/message",
+          "ack_timeout": 1000000
         },
         {
           "type": "sensor",

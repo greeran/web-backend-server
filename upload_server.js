@@ -11,6 +11,9 @@ const fileopsProto = require('./fileops_pb.js');
 const actionsProto = require('./actions_pb.js');
 const config = require('./config/config.json');
 
+const pendingActions = new Map();
+const DEFAULT_ACK_TIMEOUT = 5000;
+
 const filesTab = config.tabs.find(tab => tab.id === 'files');
 const UPLOAD_DIR = filesTab?.upload?.upload_directory
   ? path.isAbsolute(filesTab.upload.upload_directory)
@@ -219,11 +222,10 @@ app.post('/api/download', express.json(), (req, res) => {
   }
 });
 // --- RESTful Actions Endpoint (frontend-friendly, no MQTT details exposed) ---
-app.post('/api/action', express.json(), (req, res) => {
+app.post('/api/action', express.json(), async (req, res) => {
   try {
     const { action, value } = req.body;
     if (!action) throw new Error('No action provided in request');
-    // Find the button in config by button_name or action
     let buttonConfig = null;
     for (const tab of config.tabs) {
       for (const member of tab.members) {
@@ -250,8 +252,40 @@ app.post('/api/action', express.json(), (req, res) => {
       actionMsg.setAckTopic(buttonConfig.subscribe_ack_topic);
     }
     const actionBuffer = actionMsg.serializeBinary();
+    const ackTopic = buttonConfig.subscribe_ack_topic;
+    console.log('[ACTION REQUEST] Publishing to topic:', topic);
+    if (ackTopic) {
+      console.log('[ACTION REQUEST] Subscribing to ack topic:', ackTopic);
+    }
+    if (!ackTopic) {
+      mqttClient.publish(topic, actionBuffer);
+      return res.json({ ack: 'Action sent', success: true, error: '' });
+    }
+    // Subscribe to ack topic if not already
+    if (!pendingActions.has(ackTopic)) {
+      mqttClient.subscribe(ackTopic, err => {
+        if (err) console.error(`Failed to subscribe to ack topic ${ackTopic}:`, err);
+      });
+    }
+    // In the /api/action endpoint, when setting up the ackPromise:
+    const ackTimeoutMs = buttonConfig.ack_timeout || DEFAULT_ACK_TIMEOUT;
+    const ackPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingActions.delete(ackTopic);
+        reject(new Error('Timeout waiting for action ack'));
+      }, ackTimeoutMs);
+      pendingActions.set(ackTopic, (ackMsg) => {
+        clearTimeout(timeout);
+        resolve(ackMsg);
+      });
+    });
     mqttClient.publish(topic, actionBuffer);
-    res.json({ ack: 'Action sent', success: true, error: '' });
+    try {
+      const ackMsg = await ackPromise;
+      res.json({ ack: ackMsg.ack, success: ackMsg.success, error: ackMsg.error });
+    } catch (err) {
+      res.json({ ack: '', success: false, error: err.message });
+    }
   } catch (err) {
     res.json({ ack: '', success: false, error: err.message || 'Action failed' });
   }
@@ -410,6 +444,18 @@ mqttClient.on('message', (topic, message) => {
     //console.log('[SENSOR OUT]', topic, formatted);
     updateLatestSensorData(topic, formatted);
     broadcastWS({ type: 'sensor_update', sensor: topic.split('/')[1], data: formatted });
+  }
+  if (pendingActions.has(topic)) {
+    try {
+      const ackMsg = actionsProto.ActionAck.deserializeBinary(message).toObject();
+      console.log('[ACTION ACK]', topic, ackMsg);
+      pendingActions.get(topic)(ackMsg);
+      pendingActions.delete(topic);
+    } catch (e) {
+      // If deserialization fails, still clean up
+      pendingActions.get(topic)({ ack: '', success: false, error: 'Failed to parse ack' });
+      pendingActions.delete(topic);
+    }
   }
 });
 
